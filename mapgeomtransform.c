@@ -35,6 +35,11 @@ extern int yyparse(parseObj *p);
 void msStyleSetGeomTransform(styleObj *s, char *transform)
 {
   msFree(s->_geomtransform.string);
+  if (!transform) {
+    s->_geomtransform.type = MS_GEOMTRANSFORM_NONE;
+    s->_geomtransform.string = NULL;
+    return;
+  }
   s->_geomtransform.string = msStrdup(transform);
   if(!strncasecmp("start",transform,5)) {
     s->_geomtransform.type = MS_GEOMTRANSFORM_START;
@@ -190,6 +195,7 @@ int msDrawTransformedShape(mapObj *map, symbolSetObj *symbolset, imageObj *image
       msDrawShadeSymbol(symbolset, image, tmpshp, style, scalefactor);
 
       msFreeShape(tmpshp);
+      msFree(tmpshp);
     }
     break;
     case MS_GEOMTRANSFORM_LABELPOINT:

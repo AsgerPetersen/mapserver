@@ -788,6 +788,14 @@ msBuildWMSLayerURL(mapObj *map, layerObj *lp, int nRequestType,
     }
 
   } else if (nRequestType == WMS_GETLEGENDGRAPHIC) {
+    if(map->extent.maxx > map->extent.minx && map->width > 0 && map->height > 0) {
+      char szBuf[20] = "";
+      double scaledenom;
+      msCalculateScale(map->extent, map->units, map->width, map->height,
+                     map->resolution, &scaledenom);
+      snprintf(szBuf, 20, "%g",scaledenom);
+      msSetWMSParamString(psWMSParams, "SCALE", szBuf, MS_FALSE);
+    }
     pszRequestParam = "GetLegendGraphic";
 
     pszExceptionsParam = msOWSLookupMetadata(&(lp->metadata),
@@ -1356,7 +1364,7 @@ int msDrawWMSLayerLow(int nLayerId, httpRequestObj *pasReqInfo,
   }
 
   /* ------------------------------------------------------------------
-   * Check the content-type of the response to see if we got an exception,
+   * Check the Content-Type of the response to see if we got an exception,
    * if yes then try to parse it and pass the info to msSetError().
    * We log an error but we still return SUCCESS here so that the layer
    * is only skipped intead of aborting the whole draw map.
@@ -1588,7 +1596,7 @@ int msWMSLayerExecuteRequest(mapObj *map, int nOWSLayers, int nClickX, int nClic
     return MS_FAILURE;
   }
 
-  msIO_printf("Content-type: %s%c%c",pasReqInfo[0].pszContentType, 10,10);
+  msIO_printf("Content-Type: %s%c%c",pasReqInfo[0].pszContentType, 10,10);
 
   if( pasReqInfo[0].pszOutputFile ) {
     FILE *fp;

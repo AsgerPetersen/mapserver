@@ -43,7 +43,7 @@
 int msDrawLegendIcon(mapObj *map, layerObj *lp, classObj *theclass,
                      int width, int height, imageObj *image, int dstX, int dstY)
 {
-  int i, type;
+  int i, type, hasmarkersymbol;
   double offset;
   shapeObj box, zigzag;
   pointObj marker;
@@ -139,7 +139,14 @@ int msDrawLegendIcon(mapObj *map, layerObj *lp, classObj *theclass,
     case MS_LAYER_ANNOTATION:
       marker.x = dstX + MS_NINT(width / 2.0);
       marker.y = dstY + MS_NINT(height / 2.0);
-      if (theclass->numstyles > 0) {
+      hasmarkersymbol = 0;
+      for(i=0; i<theclass->numstyles; i++) {
+          if (theclass->styles[i]->symbol < map->symbolset.numsymbols && theclass->styles[i]->symbol > 0) {
+             hasmarkersymbol = 1;
+             break;
+          }
+      }
+      if (hasmarkersymbol) {
         for(i=0; i<theclass->numstyles; i++)
           msDrawMarkerSymbol(&map->symbolset, image_draw, &marker, theclass->styles[i], lp->scalefactor);
       } else if (theclass->labels && theclass->numlabels > 0) {
@@ -201,7 +208,11 @@ int msDrawLegendIcon(mapObj *map, layerObj *lp, classObj *theclass,
       offset = 1;
       /* To set the offset, we only check the size/width parameter of the first style */
       if (theclass->numstyles > 0) {
-        offset = (theclass->styles[0]->size != -1) ? theclass->styles[0]->size/2 : theclass->styles[0]->width/2;
+        if (theclass->styles[0]->symbol > 0 && theclass->styles[0]->symbol < map->symbolset.numsymbols && 
+              map->symbolset.symbol[theclass->styles[0]->symbol]->type != MS_SYMBOL_SIMPLE)
+            offset = theclass->styles[0]->size/2;
+        else
+            offset = theclass->styles[0]->width/2;
       }
       zigzag.line = (lineObj *)msSmallMalloc(sizeof(lineObj));
       zigzag.numlines = 1;
@@ -722,6 +733,7 @@ int msEmbedLegend(mapObj *map, imageObj *img)
     if(!GET_LAYER(map, l)->class[0]->labels) {
       if(msGrowClassLabels(GET_LAYER(map, l)->class[0]) == NULL) return MS_FAILURE;
       initLabel(GET_LAYER(map, l)->class[0]->labels[0]);
+      GET_LAYER(map, l)->class[0]->numlabels = 1;
       GET_LAYER(map, l)->class[0]->labels[0]->force = MS_TRUE;
       GET_LAYER(map, l)->class[0]->labels[0]->size = MS_MEDIUM; /* must set a size to have a valid label definition */
       GET_LAYER(map, l)->class[0]->labels[0]->priority = MS_MAX_LABEL_PRIORITY;

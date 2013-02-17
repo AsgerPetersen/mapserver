@@ -84,12 +84,12 @@ int msWCSException11(mapObj *map, const char *locator,
 
   xmlDocSetRootElement(psDoc, psRootNode);
 
-  psNsOws = xmlNewNs(psRootNode, BAD_CAST "http://www.opengis.net/ows/1.1", BAD_CAST "ows");
+  xmlNewNs(psRootNode, BAD_CAST "http://www.opengis.net/ows/1.1", BAD_CAST "ows");
 
   if (encoding)
-    msIO_setHeader("Content-type","text/xml; charset=%s", encoding);
+    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
   else
-    msIO_setHeader("Content-type","text/xml");
+    msIO_setHeader("Content-Type","text/xml");
   msIO_sendHeaders();
 
   xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, (encoding ? encoding : "ISO-8859-1"), 1);
@@ -102,6 +102,7 @@ int msWCSException11(mapObj *map, const char *locator,
   free(schemasLocation);
   xmlFree(buffer);
   xmlFreeDoc(psDoc);
+  xmlFreeNs(psNsOws);
 
   /* clear error since we have already reported it */
   msResetErrorList();
@@ -123,7 +124,7 @@ static char *msWCSGetFormatsList11( mapObj *map, layerObj *layer )
   char *format_list = msStrdup("");
   char **tokens = NULL, **formats = NULL;
   int  i, numtokens = 0, numformats;
-  const char *value;
+  char *value;
 
   msApplyDefaultOutputFormats(map);
 
@@ -134,6 +135,16 @@ static char *msWCSGetFormatsList11( mapObj *map, layerObj *layer )
       && (value = msOWSGetEncodeMetadata( &(layer->metadata),"CO","formats",
                                           "GTiff" )) != NULL ) {
     tokens = msStringSplit(value, ' ', &numtokens);
+    msFree(value);
+  }
+
+  /* -------------------------------------------------------------------- */
+  /*      Parse from map.web metadata.                                    */
+  /* -------------------------------------------------------------------- */
+  else if((value = msOWSGetEncodeMetadata( &(map->web.metadata), "CO", "formats",
+                                           NULL)) != NULL ) {
+    tokens = msStringSplit(value, ' ', &numtokens);
+    msFree(value);
   }
 
   /* -------------------------------------------------------------------- */
@@ -451,6 +462,8 @@ int msWCSGetCapabilities11(mapObj *map, wcsParamsObj *params,
   xsi_schemaLocation = msStringConcatenate(xsi_schemaLocation, schemaLocation);
   xsi_schemaLocation = msStringConcatenate(xsi_schemaLocation, "/ows/1.1.0/owsAll.xsd");
   xmlNewNsProp(psRootNode, NULL, BAD_CAST "xsi:schemaLocation", BAD_CAST xsi_schemaLocation);
+  msFree(schemaLocation);
+  msFree(xsi_schemaLocation);
 
   /* -------------------------------------------------------------------- */
   /*      Service metadata.                                               */
@@ -587,9 +600,9 @@ int msWCSGetCapabilities11(mapObj *map, wcsParamsObj *params,
     return MS_FAILURE;
 
   if (encoding)
-    msIO_setHeader("Content-type","text/xml; charset=%s", encoding);
+    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
   else
-    msIO_setHeader("Content-type","text/xml");
+    msIO_setHeader("Content-Type","text/xml");
   msIO_sendHeaders();
 
   context = msIO_getHandler(stdout);
@@ -765,7 +778,7 @@ msWCSDescribeCoverage_CoverageDescription11(
   /* -------------------------------------------------------------------- */
   {
     xmlNodePtr psField, psInterpMethods, psAxis;
-    const char *value;
+    char *value;
 
     psField =
       xmlNewChild(
@@ -776,12 +789,14 @@ msWCSDescribeCoverage_CoverageDescription11(
                                     "rangeset_label", NULL );
     if( value )
       xmlNewChild( psField, psOwsNs, BAD_CAST "Title", BAD_CAST value );
+    msFree(value);
 
     /* ows:Abstract? TODO */
 
     value = msOWSGetEncodeMetadata( &(layer->metadata), "CO",
                                     "rangeset_name", "raster" );
     xmlNewChild( psField, NULL, BAD_CAST "Identifier", BAD_CAST value );
+    msFree(value);
 
     xmlNewChild(
         xmlNewChild( psField, NULL, BAD_CAST "Definition", NULL ),
@@ -793,6 +808,7 @@ msWCSDescribeCoverage_CoverageDescription11(
     if( value )
       xmlNewChild( psField, NULL, BAD_CAST "NullValue",
                    BAD_CAST value );
+    msFree(value);
 
     /* InterpolationMethods */
     psInterpMethods =
@@ -813,6 +829,7 @@ msWCSDescribeCoverage_CoverageDescription11(
                                       "bands_name", "bands" );
       psAxis = xmlNewChild( psField, NULL, BAD_CAST "Axis", NULL );
       xmlNewProp( psAxis, BAD_CAST "identifier", BAD_CAST value );
+      msFree(value);
 
       psKeys = xmlNewChild( psAxis, NULL, BAD_CAST
                             "AvailableKeys",  NULL );
@@ -944,6 +961,8 @@ int msWCSDescribeCoverage11(mapObj *map, wcsParamsObj *params, owsRequestObj *ow
   xsi_schemaLocation = msStringConcatenate(xsi_schemaLocation, schemaLocation);
   xsi_schemaLocation = msStringConcatenate(xsi_schemaLocation, "/ows/1.1.0/owsAll.xsd");
   xmlNewNsProp(psRootNode, NULL, BAD_CAST "xsi:schemaLocation", BAD_CAST xsi_schemaLocation);
+  msFree(schemaLocation);
+  msFree(xsi_schemaLocation);
 
   /* -------------------------------------------------------------------- */
   /*      Generate a CoverageDescription for each requested coverage.     */
@@ -980,9 +999,9 @@ int msWCSDescribeCoverage11(mapObj *map, wcsParamsObj *params, owsRequestObj *ow
       return MS_FAILURE;
 
     if (encoding)
-      msIO_setHeader("Content-type","text/xml; charset=%s", encoding);
+      msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
     else
-      msIO_setHeader("Content-type","text/xml");
+      msIO_setHeader("Content-Type","text/xml");
     msIO_sendHeaders();
 
     context = msIO_getHandler(stdout);
@@ -1140,6 +1159,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
 {
   int status, i;
   char *filename = NULL;
+  char *base_dir = NULL;
   const char *encoding;
   const char *fo_filename;
 
@@ -1172,11 +1192,12 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
 
     if( GDALGetMetadataItem( hDriver, GDAL_DCAP_VIRTUALIO, NULL )
         != NULL ) {
+      base_dir = msTmpFile(map, map->mappath, "/vsimem/wcsout", NULL);
       if( fo_filename )
-        filename = msStrdup(CPLFormFilename("/vsimem/wcsout",
+        filename = msStrdup(CPLFormFilename(base_dir,
                                             fo_filename,NULL));
       else
-        filename = msStrdup(CPLFormFilename("/vsimem/wcsout",
+        filename = msStrdup(CPLFormFilename(base_dir,
                                             "out", pszExtension ));
 
       /*            CleanVSIDir( "/vsimem/wcsout" ); */
@@ -1184,6 +1205,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
       msReleaseLock( TLOCK_GDAL );
       status = msSaveImage(map, image, filename);
       if( status != MS_SUCCESS ) {
+        msFree(filename);
         msSetError(MS_MISCERR, "msSaveImage() failed",
                    "msWCSReturnCoverage11()");
         return msWCSException11(map, "mapserv", "NoApplicableCode",
@@ -1201,9 +1223,9 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
     msIO_sendHeaders();
     msIO_fprintf(
       stdout,
-      "--wcs\n"
-      "Content-Type: text/xml; charset=%s\n"
-      "Content-ID: wcs.xml%c%c"
+      "\r\n--wcs\r\n"
+      "Content-Type: text/xml; charset=%s\r\n"
+      "Content-ID: wcs.xml\r\n\r\n"
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       "<Coverages\n"
       "     xmlns=\"http://www.opengis.net/wcs/1.1\"\n"
@@ -1212,16 +1234,15 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
       "     xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
       "     xsi:schemaLocation=\"http://www.opengis.net/ows/1.1 ../owsCoverages.xsd\">\n"
       "  <Coverage>\n",
-      encoding,
-      10, 10 );
+      encoding);
   } else {
     msIO_setHeader("Content-Type","multipart/mixed; boundary=wcs");
     msIO_sendHeaders();
     msIO_fprintf(
       stdout,
-      "--wcs\n"
-      "Content-Type: text/xml\n"
-      "Content-ID: wcs.xml%c%c"
+      "\r\n--wcs\r\n"
+      "Content-Type: text/xml\r\n"
+      "Content-ID: wcs.xml\r\n\r\n"
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       "<Coverages\n"
       "     xmlns=\"http://www.opengis.net/wcs/1.1\"\n"
@@ -1229,8 +1250,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
       "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n"
       "     xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
       "     xsi:schemaLocation=\"http://www.opengis.net/ows/1.1 ../owsCoverages.xsd\">\n"
-      "  <Coverage>\n",
-      10, 10 );
+      "  <Coverage>\n");
   }
 
   /* -------------------------------------------------------------------- */
@@ -1243,16 +1263,15 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
       "    <ows:Reference xlink:href=\"cid:coverage/wcs.%s\"/>\n"
       "  </Coverage>\n"
       "</Coverages>\n"
-      "--wcs\n"
-      "Content-Type: %s\n"
-      "Content-Description: coverage data\n"
-      "Content-Transfer-Encoding: binary\n"
-      "Content-ID: coverage/wcs.%s\n"
-      "Content-Disposition: INLINE%c%c",
+      "\r\n--wcs\r\n"
+      "Content-Type: %s\r\n"
+      "Content-Description: coverage data\r\n"
+      "Content-Transfer-Encoding: binary\r\n"
+      "Content-ID: coverage/wcs.%s\r\n"
+      "Content-Disposition: INLINE\r\n\r\n",
       MS_IMAGE_EXTENSION(map->outputformat),
       MS_IMAGE_MIME_TYPE(map->outputformat),
-      MS_IMAGE_EXTENSION(map->outputformat),
-      10, 10 );
+      MS_IMAGE_EXTENSION(map->outputformat));
 
     status = msSaveImage(map, image, NULL);
     if( status != MS_SUCCESS ) {
@@ -1260,7 +1279,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
       return msWCSException11(map, "mapserv", "NoApplicableCode", params->version);
     }
 
-    msIO_fprintf( stdout, "\n--wcs--%c%c", 10, 10 );
+    msIO_fprintf( stdout, "\r\n--wcs--\r\n" );
     return MS_SUCCESS;
   }
 
@@ -1270,7 +1289,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
   /*      it is the only file listed in the coverages document.           */
   /* -------------------------------------------------------------------- */
   {
-    char **all_files = CPLReadDir( "/vsimem/wcsout" );
+    char **all_files = CPLReadDir( base_dir );
     int count = CSLCount(all_files);
 
     if( msIO_needBinaryStdout() == MS_FAILURE )
@@ -1318,18 +1337,17 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
 
       msIO_fprintf(
         stdout,
-        "--wcs\n"
-        "Content-Type: %s\n"
-        "Content-Description: coverage data\n"
-        "Content-Transfer-Encoding: binary\n"
-        "Content-ID: coverage/%s\n"
-        "Content-Disposition: INLINE%c%c",
+        "\r\n--wcs\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Description: coverage data\r\n"
+        "Content-Transfer-Encoding: binary\r\n"
+        "Content-ID: coverage/%s\r\n"
+        "Content-Disposition: INLINE\r\n\r\n",
         mimetype,
-        all_files[i],
-        10, 10 );
+        all_files[i]);
 
       fp = VSIFOpenL(
-             CPLFormFilename("/vsimem/wcsout", all_files[i], NULL),
+             CPLFormFilename(base_dir, all_files[i], NULL),
              "rb" );
       if( fp == NULL ) {
         msReleaseLock( TLOCK_GDAL );
@@ -1344,13 +1362,15 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
 
       VSIFCloseL( fp );
 
-      VSIUnlink( all_files[i] );
+      VSIUnlink( CPLFormFilename(base_dir, all_files[i], NULL) );
     }
 
+    msFree(base_dir);
+    msFree(filename);
     CSLDestroy( all_files );
     msReleaseLock( TLOCK_GDAL );
 
-    msIO_fprintf( stdout, "\n--wcs--%c%c", 10, 10 );
+    msIO_fprintf( stdout, "\r\n--wcs--\r\n" );
     return MS_SUCCESS;
   }
 }

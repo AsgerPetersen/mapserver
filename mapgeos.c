@@ -205,6 +205,7 @@ static GEOSGeom msGEOSShape2Geometry_simplepolygon(shapeObj *shape, int r, int *
   g = GEOSGeom_createPolygon(outerRing, innerRings, numInnerRings);
 
   free(innerList); /* clean up */
+  free(innerRings); /* clean up */
 
   return g;
 }
@@ -238,6 +239,7 @@ static GEOSGeom msGEOSShape2Geometry_polygon(shapeObj *shape)
     }
 
     g = GEOSGeom_createCollection(GEOS_MULTIPOLYGON, polygons, numOuterRings);
+    free(polygons);
   }
 
   free(outerList);
@@ -651,6 +653,27 @@ void msGEOSFreeWKT(char* pszGEOSWKT)
 #endif
 #else
   msSetError(MS_GEOSERR, "GEOS support is not available.", "msGEOSFreeWKT()");
+#endif
+}
+
+shapeObj *msGEOSOffsetCurve(shapeObj *p, double offset) {
+#if defined USE_GEOS && defined HAVE_GEOS_OFFSET_CURVE
+   GEOSGeom g1, g2; 
+
+  if(!p) 
+    return NULL;
+
+  if(!p->geometry) /* if no geometry for the shape then build one */
+    p->geometry = (GEOSGeom) msGEOSShape2Geometry(p);
+
+  g1 = (GEOSGeom) p->geometry;
+  if(!g1) return NULL;
+  
+  g2 = GEOSOffsetCurve(g1, offset, 4, GEOSBUF_JOIN_MITRE, fabs(offset*1.5));
+  return msGEOSGeometry2Shape(g2);
+#else
+  msSetError(MS_GEOSERR, "GEOS support is not available.", "msGEOSingleSidedBuffer()");
+  return NULL;
 #endif
 }
 

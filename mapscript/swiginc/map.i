@@ -184,6 +184,17 @@
                                  MS_NOOVERRIDE, MS_NOOVERRIDE );
         }
     }
+
+  %newobject getOutputFormat;
+  outputFormatObj *getOutputFormat(int i) {
+    if(i >= 0 && i < self->numoutputformats) {
+    	MS_REFCNT_INCR(self->outputformatlist[i]);
+        return (self->outputformatlist[i]); 
+    } else {
+      return NULL;
+    }
+  }
+
         
   void setOutputFormat( outputFormatObj *format ) {
       msApplyOutputFormat( &(self->outputformat), format, MS_NOOVERRIDE, 
@@ -248,7 +259,10 @@
     self->query.filter = (expressionObj *) malloc(sizeof(expressionObj));
     self->query.filter->string = strdup(string);
     self->query.filter->type = 2000; /* MS_EXPRESSION: lot's of conflicts in mapfile.h */
-
+    self->query.filter->compiled = MS_FALSE;
+    self->query.filter->flags = 0;
+    self->query.filter->tokens = self->query.filter->curtoken = NULL;
+    
     self->query.rect = self->extent;
 
     return msQueryByFilter(self);

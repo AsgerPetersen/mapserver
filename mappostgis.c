@@ -65,10 +65,6 @@
 #include "maptime.h"
 #include "mappostgis.h"
 
-#ifndef FLT_MAX
-#define FLT_MAX 25000000.0
-#endif
-
 #define FP_EPSILON 1e-12
 #define FP_EQ(a, b) (fabs((a)-(b)) < FP_EPSILON)
 #define FP_LEFT -1
@@ -1910,7 +1906,7 @@ char *msPostGISBuildSQLWhere(layerObj *layer, rectObj *rect, long *uid)
   if ( layerinfo->paging && layer->startindex > 0 ) {
     static char *strOffsetTemplate = " offset %d";
     strOffset = msSmallMalloc(strlen(strOffsetTemplate) + 12);
-    sprintf(strOffset, strOffsetTemplate, layer->maxfeatures);
+    sprintf(strOffset, strOffsetTemplate, layer->startindex-1);
     strOffsetLength = strlen(strOffset);
   }
 
@@ -2999,27 +2995,6 @@ int msPostGISLayerGetItems(layerObj *layer)
 }
 
 /*
-** msPostGISLayerGetExtent()
-**
-** Registered vtable->LayerGetExtent function.
-**
-** TODO: Update to use proper PostGIS functions to pull
-** extent quickly and accurately when available.
-*/
-int msPostGISLayerGetExtent(layerObj *layer, rectObj *extent)
-{
-  if (layer->debug) {
-    msDebug("msPOSTGISLayerGetExtent called.\n");
-  }
-
-  extent->minx = extent->miny = -1.0 * FLT_MAX ;
-  extent->maxx = extent->maxy = FLT_MAX;
-
-  return MS_SUCCESS;
-
-}
-
-/*
  * make sure that the timestring is complete and acceptable
  * to the date_trunc function :
  * - if the resolution is year (2004) or month (2004-01),
@@ -3031,6 +3006,7 @@ int postgresTimeStampForTimeString(const char *timestring, char *dest, size_t de
 {
   int nlength = strlen(timestring);
   int timeresolution = msTimeGetResolution(timestring);
+  int bNoDate = (*timestring == 'T');
   if (timeresolution < 0)
     return MS_FALSE;
 
@@ -3054,20 +3030,35 @@ int postgresTimeStampForTimeString(const char *timestring, char *dest, size_t de
       break;
     case TIME_RESOLUTION_HOUR:
       if (timestring[nlength-1] != ':') {
-        snprintf(dest, destsize,"timestamp '%s:00:00'", timestring);
+        if(bNoDate)
+          snprintf(dest, destsize,"time '%s:00:00'", timestring);
+        else
+          snprintf(dest, destsize,"timestamp '%s:00:00'", timestring);
       } else {
-        snprintf(dest, destsize,"timestamp '%s00:00'", timestring);
+        if(bNoDate)
+          snprintf(dest, destsize,"time '%s00:00'", timestring);
+        else
+          snprintf(dest, destsize,"timestamp '%s00:00'", timestring);
       }
       break;
     case TIME_RESOLUTION_MINUTE:
       if (timestring[nlength-1] != ':') {
-        snprintf(dest, destsize,"timestamp '%s:00'", timestring);
+        if(bNoDate)
+          snprintf(dest, destsize,"time '%s:00'", timestring);
+        else
+          snprintf(dest, destsize,"timestamp '%s:00'", timestring);
       } else {
-        snprintf(dest, destsize,"timestamp '%s00'", timestring);
+        if(bNoDate)
+          snprintf(dest, destsize,"time '%s00'", timestring);
+        else
+          snprintf(dest, destsize,"timestamp '%s00'", timestring);
       }
       break;
     case TIME_RESOLUTION_SECOND:
-      snprintf(dest, destsize,"timestamp '%s'", timestring);
+      if(bNoDate)
+         snprintf(dest, destsize,"time '%s'", timestring);
+      else
+         snprintf(dest, destsize,"timestamp '%s'", timestring);
       break;
     default:
       return MS_FAILURE;
@@ -3373,10 +3364,10 @@ int msPostGISLayerInitializeVirtualTable(layerObj *layer)
   layer->vtable->LayerGetShape = msPostGISLayerGetShape;
   layer->vtable->LayerClose = msPostGISLayerClose;
   layer->vtable->LayerGetItems = msPostGISLayerGetItems;
-  layer->vtable->LayerGetExtent = msPostGISLayerGetExtent;
+  /* layer->vtable->LayerGetExtent = msPostGISLayerGetExtent; */
   layer->vtable->LayerApplyFilterToLayer = msLayerApplyCondSQLFilterToLayer;
   /* layer->vtable->LayerGetAutoStyle, not supported for this layer */
-  layer->vtable->LayerCloseConnection = msPostGISLayerClose;
+  /* layer->vtable->LayerCloseConnection = msPostGISLayerClose; */
   layer->vtable->LayerSetTimeFilter = msPostGISLayerSetTimeFilter;
   /* layer->vtable->LayerCreateItems, use default */
   /* layer->vtable->LayerGetNumFeatures, use default */

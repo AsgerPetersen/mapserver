@@ -384,6 +384,7 @@ void msWriteErrorImage(mapObj *map, char *filename, int blank)
   int nWidthTxt = 0;
   outputFormatObj *format = NULL;
   char *errormsg = msGetErrorString("; ");
+  errorObj *error = msGetErrorObj();
   fontMetrics *font = NULL;
   char *imagepath = NULL, *imageurl = NULL;
   labelStyleObj ls;
@@ -482,11 +483,17 @@ void msWriteErrorImage(mapObj *map, char *filename, int blank)
 
   /* actually write the image */
   if(!filename) {
-    msIO_setHeader("Content-type","%s", MS_IMAGE_MIME_TYPE(format));
+    msIO_setHeader("Content-Type","%s", MS_IMAGE_MIME_TYPE(format));
     msIO_sendHeaders();
   }
   msSaveImage(NULL,img,filename);
   msFreeImage(img);
+
+  /* the errors are reported */
+  while(error && error->code != MS_NOERR) {
+    error->isreported = MS_TRUE;
+    error = error->next;
+  }
 
   if (format->refcount == 0)
     msFreeOutputFormat(format);
@@ -524,6 +531,9 @@ char *msGetVersion()
   strcat(version, " SUPPORTS=FREETYPE");
 #ifdef USE_CAIRO
   strcat(version, " SUPPORTS=CAIRO");
+#endif
+#ifdef USE_SVG_CAIRO
+  strcat(version, " SUPPORTS=SVG_SYMBOLS");
 #endif
 #ifdef USE_OGL
   strcat(version, " SUPPORTS=OPENGL");

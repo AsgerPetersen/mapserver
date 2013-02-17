@@ -65,9 +65,9 @@ int msWFSException(mapObj *map, const char *locator, const char *code,
 
   encoding = msOWSLookupMetadata(&(map->web.metadata), "FO", "encoding");
   if (encoding)
-    msIO_setHeader("Content-type","text/xml; charset=%s", encoding);
+    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
   else
-    msIO_setHeader("Content-type","text/xml");
+    msIO_setHeader("Content-Type","text/xml");
   msIO_sendHeaders();
 
   msOWSPrintEncodeMetadata(stdout, &(map->web.metadata), "FO", "encoding", OWS_NOERR,
@@ -368,8 +368,8 @@ static int msWFSGetFeatureApplySRS(mapObj *map, const char *srs, const char *ver
     nTmp = msLoadProjectionStringEPSG(&(sProjTmp), pszOutputSRS);
     if (nTmp == 0) {
       msProjectRect(&(map->projection), &(sProjTmp), &map->extent);
-      msFreeProjection(&(sProjTmp));
     }
+    msFreeProjection(&(sProjTmp));
     /*check if the srs passed is valid. Assuming that it is an EPSG:xxx format,
       Or urn:ogc:def:crs:EPSG:xxx format. */
     if (strncasecmp(pszOutputSRS, "EPSG:", 5) == 0 ||
@@ -676,9 +676,9 @@ int msWFSGetCapabilities(mapObj *map, wfsParamsObj *wfsparams, cgiRequestObj *re
 
   encoding = msOWSLookupMetadata(&(map->web.metadata), "FO", "encoding");
   if (encoding)
-    msIO_setHeader("Content-type","text/xml; charset=%s", encoding);
+    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
   else
-    msIO_setHeader("Content-type","text/xml");
+    msIO_setHeader("Content-Type","text/xml");
   msIO_sendHeaders();
 
   msOWSPrintEncodeMetadata(stdout, &(map->web.metadata), "FO", "encoding", OWS_NOERR,
@@ -1115,9 +1115,9 @@ this request. Check wfs/ows_enable_request settings.", "msWFSDescribeFeatureType
   value = msOWSLookupMetadata(&(map->web.metadata), "FO", "encoding");
 
   if (value)
-    msIO_setHeader("Content-type","%s; charset=%s",mimetype, value);
+    msIO_setHeader("Content-Type","%s; charset=%s",mimetype, value);
   else
-    msIO_setHeader("Content-type",mimetype);
+    msIO_setHeader("Content-Type",mimetype);
   msIO_sendHeaders();
 
   if (mimetype)
@@ -1957,8 +1957,10 @@ int msWFSGetFeature(mapObj *map, wfsParamsObj *paramsObj, cgiRequestObj *req, ow
     }
   }
 
-  if (paramsObj->nStartIndex > 0)
+  if (paramsObj->nStartIndex > 0) {
     startindex = paramsObj->nStartIndex;
+    map->query.startindex = startindex;    
+  } 
 
 
   /* maxfeatures set */
@@ -1973,12 +1975,20 @@ int msWFSGetFeature(mapObj *map, wfsParamsObj *paramsObj, cgiRequestObj *req, ow
           lp->maxfeatures = maxfeatures;
       }
     }
+    map->query.maxfeatures = maxfeatures;
   }
 
   /* startindex set */
-  if (startindex > 0 &&
-      (nQueriedLayers == 1 && msLayerSupportsPaging(lpQueried))) {
-    lpQueried->startindex = startindex;
+  if (startindex > 0 && nQueriedLayers > 1) {
+    for(j=0; j<map->numlayers; j++) {
+      layerObj *lp;
+      lp = GET_LAYER(map, j);
+      if (lp->status == MS_ON) {
+        msLayerEnablePaging(lp, MS_FALSE);
+      }
+    }
+  } else if (startindex > 0 && lpQueried) {
+    lpQueried->startindex = startindex;    
   }
 
   if (paramsObj->pszFilter) {
@@ -2011,8 +2021,6 @@ int msWFSGetFeature(mapObj *map, wfsParamsObj *paramsObj, cgiRequestObj *req, ow
   if (paramsObj->pszFeatureId) {
     bFeatureIdSet = 1;
   }
-
-
 
 #ifdef USE_OGR
   if (bFilterSet && pszFilter && strlen(pszFilter) > 0) {
@@ -2098,11 +2106,6 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()", laye
       }
       psNode = FLTParseFilterEncoding(paszFilter[i]);
 
-      /* Not querying a single layer? no driver pagination */
-      if (lpQueried && (nQueriedLayers > 1)) {
-        msLayerEnablePaging(lpQueried, MS_FALSE);
-      }
-
       if (!psNode) {
         msSetError(MS_WFSERR,
                    "Invalid or Unsupported FILTER in GetFeature : %s",
@@ -2112,6 +2115,9 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()", laye
 
       /*preparse the filter for gml aliases*/
       FLTPreParseFilterForAlias(psNode, map, iLayerIndex, "G");
+
+      if (msWFSGetFeatureApplySRS(map, paramsObj->pszSrs, paramsObj->pszVersion) == MS_FAILURE)
+        return msWFSException(map, "typename", "InvalidParameterValue", paramsObj->pszVersion);
 
       /* run filter.  If no results are found, do not throw exception */
       /* this is a null result */
@@ -2197,9 +2203,9 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()", laye
             strcasecmp(lp->name, aFIDLayers[j]) == 0) {
           lp->status = MS_ON;
         }
+        if (msWFSGetFeatureApplySRS(map, paramsObj->pszSrs, paramsObj->pszVersion) == MS_FAILURE)
+          return msWFSException(map, "typename", "InvalidParameterValue", paramsObj->pszVersion);
       }
-      if (msWFSGetFeatureApplySRS(map, paramsObj->pszSrs, paramsObj->pszVersion) == MS_FAILURE)
-        return msWFSException(map, "typename", "InvalidParameterValue", paramsObj->pszVersion);
     }
 
     for (j=0; j< iFIDLayers; j++) {
@@ -2214,7 +2220,7 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()", laye
             lp->template = msStrdup("ttt.html");
           }
           psNode = FLTCreateFeatureIdFilterEncoding(aFIDValues[j]);
-
+          
           if( FLTApplyFilterToLayer(psNode, map, lp->index) != MS_SUCCESS ) {
             msSetError(MS_WFSERR, "FLTApplyFilterToLayer() failed", "msWFSGetFeature");
             return msWFSException(map, "mapserv", "NoApplicableCode", paramsObj->pszVersion);
@@ -2258,10 +2264,10 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()",
   if(layers)
     msFreeCharArray(layers, numlayers);
 
-
+  /* Apply the requested SRS */
   if (msWFSGetFeatureApplySRS(map, paramsObj->pszSrs, paramsObj->pszVersion) == MS_FAILURE)
     return msWFSException(map, "typename", "InvalidParameterValue", paramsObj->pszVersion);
-
+  
   /*
   ** Perform Query (only BBOX for now)
   */
@@ -2379,8 +2385,6 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()",
       iNumberOfFeatures += GET_LAYER(map, j)->resultcache->numresults;
     }
   }
-  if(maxfeatures > 0 && maxfeatures < iNumberOfFeatures)
-    iNumberOfFeatures = maxfeatures;
 
   /*
   ** GML Header generation.
@@ -2391,9 +2395,9 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()",
   if( psFormat == NULL ) {
     value = msOWSLookupMetadata(&(map->web.metadata), "FO", "encoding");
     if (value)
-      msIO_setHeader("Content-type","%s; charset=%s", output_mime_type,value);
+      msIO_setHeader("Content-Type","%s; charset=%s", output_mime_type,value);
     else
-      msIO_setHeader("Content-type",output_mime_type);
+      msIO_setHeader("Content-Type",output_mime_type);
     msIO_sendHeaders();
 
     status = msWFSGetFeature_GMLPreamble( map, req, &gmlinfo, paramsObj,
@@ -2406,14 +2410,13 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()",
   }
 
   /* handle case of maxfeatures = 0 */
-  /*internally use a start index that start with with 0 as the first index*/
+  /*internally use a start index that start with 0 as the first index*/
   if( psFormat == NULL ) {
     if(maxfeatures != 0 && iResultTypeHits == 0)
-      status = msGMLWriteWFSQuery(map, stdout, startindex-1, maxfeatures,
+      status = msGMLWriteWFSQuery(map, stdout,
                                   (char *) gmlinfo.user_namespace_prefix,
                                   outputformat);
   } else {
-    int to_allow = maxfeatures, to_skip = startindex-1;
     mapservObj *mapserv = msAllocMapServObj();
 
     /* Setup dummy mapserv object */
@@ -2422,35 +2425,6 @@ this request. Check wfs/ows_enable_request settings.", "msWFSGetFeature()",
     msFreeCgiObj(mapserv->request);
     mapserv->request = req;
     map->querymap.status = MS_FALSE;
-
-    /* trim the query result(s) if maxfeatures or startindex set. */
-    for( j=0; j < map->numlayers; j++ ) {
-      layerObj *lp = GET_LAYER(map, j);
-      if (lp->resultcache && lp->resultcache->numresults > 0) {
-        if( to_skip > 0 && lp->resultcache->numresults < to_skip ) {
-          to_skip -= lp->resultcache->numresults;
-          lp->resultcache->numresults = 0;
-        } else if( to_skip > 0 ) {
-          memmove( lp->resultcache->results + 0,
-                   lp->resultcache->results + to_skip,
-                   sizeof(resultObj) * (lp->resultcache->numresults - to_skip) );
-          lp->resultcache->numresults -= to_skip;
-          to_skip = 0;
-        }
-
-        if( maxfeatures > 0 ) {
-          if( lp->resultcache->numresults > to_allow ) {
-            lp->resultcache->numresults = to_allow;
-            to_allow = 0;
-          } else {
-            to_allow -= lp->resultcache->numresults;
-            if( to_allow < 0 )
-              to_allow = 0;
-
-          }
-        }
-      }
-    }
 
     status = msReturnTemplateQuery( mapserv, psFormat->name, NULL );
 
@@ -2768,6 +2742,7 @@ void msWFSFreeParamsObj(wfsParamsObj *wfsparams)
     free(wfsparams->pszTypeName);
     free(wfsparams->pszFilter);
     free(wfsparams->pszBbox);
+    free(wfsparams->pszGeometryName);
     free(wfsparams->pszOutputFormat);
     free(wfsparams->pszFeatureId);
     free(wfsparams->pszSrs);
